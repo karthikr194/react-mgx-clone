@@ -1,31 +1,70 @@
-import { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Code2 } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft, Send, Code2, Eye, FileCode, AlertCircle, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import Navbar from "@/components/Navbar";
 import CodeEditor from "@/components/CodeEditor";
 import CodePreview from "@/components/CodePreview";
-import Navbar from "@/components/Navbar";
+
+interface Message {
+  id: string;
+  role: "user" | "assistant" | "error";
+  content: string;
+  timestamp: Date;
+}
+
+interface FileTab {
+  name: string;
+  content: string;
+  language: string;
+}
 
 const CodeGenerator = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const promptFromUrl = searchParams.get("prompt");
-  const modelFromUrl = searchParams.get("model") || "DeepSeek";
-
-  const [generatedCode, setGeneratedCode] = useState("");
-  const [isRunning, setIsRunning] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: "1",
+      role: "assistant",
+      content: "Hi! I'm DeepSeek AI. Describe what you want to build and I'll generate the code for you.",
+      timestamp: new Date(),
+    }
+  ]);
+  const [inputText, setInputText] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [currentFile, setCurrentFile] = useState<FileTab>({
+    name: "Component.tsx",
+    content: "",
+    language: "typescript"
+  });
+  const [viewMode, setViewMode] = useState<"code" | "preview">("code");
+  const [isRunning, setIsRunning] = useState(false);
+  const [files, setFiles] = useState<FileTab[]>([]);
 
   useEffect(() => {
-    if (promptFromUrl && !generatedCode) {
-      generateCode(promptFromUrl);
-    }
-  }, [promptFromUrl]);
+    scrollToBottom();
+  }, [messages]);
 
-  const generateCode = async (prompt: string) => {
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  const handleSendMessage = async () => {
+    if (!inputText.trim() || isGenerating) return;
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: "user",
+      content: inputText,
+      timestamp: new Date(),
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setInputText("");
     setIsGenerating(true);
-    
+
     try {
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-code`, {
         method: 'POST',
@@ -33,30 +72,68 @@ const CodeGenerator = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({ prompt: inputText }),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to generate code');
+        throw new Error(errorData.details || errorData.error || 'Failed to generate code');
       }
 
       const data = await response.json();
-      setGeneratedCode(data.code);
       
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: "I've generated the code for you. Check the editor on the right.",
+        timestamp: new Date(),
+      };
+
+      setMessages(prev => [...prev, assistantMessage]);
+      
+      // Update the current file with generated code
+      setCurrentFile({
+        name: "Component.tsx",
+        content: data.code,
+        language: "typescript"
+      });
+
+      // Add to files list if not exists
+      setFiles(prev => {
+        const exists = prev.find(f => f.name === "Component.tsx");
+        if (!exists) {
+          return [...prev, { name: "Component.tsx", content: data.code, language: "typescript" }];
+        }
+        return prev.map(f => 
+          f.name === "Component.tsx" ? { ...f, content: data.code } : f
+        );
+      });
+
       toast({
         title: "Code Generated!",
-        description: "Your component is ready. Click 'Run' to preview it.",
+        description: "Your component is ready.",
       });
-      
-      // Auto-run after generation
-      setTimeout(() => {
-        setIsRunning(true);
-        setTimeout(() => setIsRunning(false), 100);
-      }, 500);
-      
+
+      // Auto-run if in preview mode
+      if (viewMode === "preview") {
+        setTimeout(() => {
+          setIsRunning(true);
+          setTimeout(() => setIsRunning(false), 100);
+        }, 500);
+      }
+
     } catch (error) {
       console.error('Code generation error:', error);
+      
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "error",
+        content: error instanceof Error ? error.message : "Failed to generate code. Please try again.",
+        timestamp: new Date(),
+      };
+
+      setMessages(prev => [...prev, errorMessage]);
+
       toast({
         title: "Generation Failed",
         description: error instanceof Error ? error.message : "Failed to generate code",
@@ -67,21 +144,81 @@ const CodeGenerator = () => {
     }
   };
 
-  const handleRun = () => {
-    if (!generatedCode) {
-      toast({
-        title: "No Code",
-        description: "Generate code first before running",
-        variant: "destructive",
-      });
-      return;
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
     }
-    setIsRunning(true);
-    setTimeout(() => setIsRunning(false), 100);
   };
 
-  const handleBack = () => {
-    navigate("/");
+  const handleFixError = async (errorContent: string) => {
+    const fixPrompt = `Fix this error in the code:\n\n${errorContent}\n\nCurrent code:\n${currentFile.content}`;
+    
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: "user",
+      content: `Fix error: ${errorContent}`,
+      timestamp: new Date(),
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setIsGenerating(true);
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-code`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ prompt: fixPrompt }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.details || errorData.error || 'Failed to fix error');
+      }
+
+      const data = await response.json();
+      
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: "I've fixed the error. Check the updated code.",
+        timestamp: new Date(),
+      };
+
+      setMessages(prev => [...prev, assistantMessage]);
+      
+      setCurrentFile(prev => ({
+        ...prev,
+        content: data.code
+      }));
+
+      toast({
+        title: "Error Fixed!",
+        description: "The code has been updated.",
+      });
+
+    } catch (error) {
+      console.error('Error fixing failed:', error);
+      
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "error",
+        content: error instanceof Error ? error.message : "Failed to fix error. Please try again.",
+        timestamp: new Date(),
+      };
+
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleRun = () => {
+    setIsRunning(true);
+    setTimeout(() => setIsRunning(false), 100);
   };
 
   return (
@@ -90,13 +227,13 @@ const CodeGenerator = () => {
       
       {/* Header */}
       <header className="border-b bg-card/50 backdrop-blur-sm sticky top-14 z-40">
-        <div className="container mx-auto px-4 py-4">
+        <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={handleBack}
+                onClick={() => navigate("/")}
                 className="gap-2"
               >
                 <ArrowLeft className="h-4 w-4" />
@@ -107,50 +244,138 @@ const CodeGenerator = () => {
               
               <div className="flex items-center gap-2">
                 <Code2 className="h-5 w-5 text-primary" />
-                <h1 className="text-lg font-semibold">Code Generator</h1>
+                <h1 className="text-lg font-semibold">AI Code Generator</h1>
                 <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded-full">
-                  {modelFromUrl}
+                  DeepSeek
                 </span>
               </div>
             </div>
-            
-            {promptFromUrl && (
-              <div className="hidden md:block text-sm text-muted-foreground max-w-md truncate">
-                Prompt: <span className="italic">{promptFromUrl}</span>
+
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                <button
+                  onClick={() => setViewMode("code")}
+                  className={`px-3 py-1.5 rounded text-sm transition-smooth ${
+                    viewMode === "code" ? "bg-background shadow-sm" : "hover:bg-background/50"
+                  }`}
+                >
+                  <FileCode className="h-4 w-4 inline mr-1" />
+                  Code
+                </button>
+                <button
+                  onClick={() => {
+                    setViewMode("preview");
+                    handleRun();
+                  }}
+                  className={`px-3 py-1.5 rounded text-sm transition-smooth ${
+                    viewMode === "preview" ? "bg-background shadow-sm" : "hover:bg-background/50"
+                  }`}
+                >
+                  <Eye className="h-4 w-4 inline mr-1" />
+                  Preview
+                </button>
               </div>
-            )}
+            </div>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 container mx-auto px-4 py-6 overflow-hidden">
-        {isGenerating ? (
-          <div className="h-full flex items-center justify-center">
-            <div className="text-center space-y-4">
-              <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
-              <div>
-                <h2 className="text-xl font-semibold mb-2">Generating Code...</h2>
-                <p className="text-sm text-muted-foreground">
-                  DeepSeek is creating your component
-                </p>
+      <main className="flex-1 flex overflow-hidden">
+        {/* Chat Sidebar - 30% */}
+        <aside className="w-[30%] border-r flex flex-col bg-card/30">
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+              >
+                <div
+                  className={`max-w-[85%] rounded-lg p-3 ${
+                    message.role === "user"
+                      ? "bg-primary text-primary-foreground"
+                      : message.role === "error"
+                      ? "bg-destructive/10 border border-destructive/20"
+                      : "bg-muted"
+                  }`}
+                >
+                  {message.role === "error" && (
+                    <div className="flex items-start gap-2 mb-2">
+                      <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
+                      <span className="text-xs font-medium text-destructive">Error</span>
+                    </div>
+                  )}
+                  <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
+                  {message.role === "error" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-2 h-7 text-xs"
+                      onClick={() => handleFixError(message.content)}
+                    >
+                      Fix This Error
+                    </Button>
+                  )}
+                  <span className="text-xs opacity-60 mt-1 block">
+                    {message.timestamp.toLocaleTimeString()}
+                  </span>
+                </div>
               </div>
+            ))}
+            {isGenerating && (
+              <div className="flex justify-start">
+                <div className="bg-muted rounded-lg p-3">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input */}
+          <div className="p-4 border-t bg-background">
+            <div className="flex gap-2">
+              <textarea
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder="Describe what you want to build..."
+                className="flex-1 resize-none bg-muted border-0 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[60px] max-h-[120px]"
+                rows={2}
+              />
+              <Button
+                onClick={handleSendMessage}
+                disabled={!inputText.trim() || isGenerating}
+                className="self-end"
+                size="icon"
+              >
+                <Send className="h-4 w-4" />
+              </Button>
             </div>
           </div>
-        ) : (
-          <div className="h-[calc(100vh-180px)] grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <CodeEditor
-              code={generatedCode}
-              onCodeChange={setGeneratedCode}
-              onRun={handleRun}
-              isRunning={isRunning}
-            />
-            <CodePreview
-              code={generatedCode}
-              isRunning={isRunning}
-            />
-          </div>
-        )}
+        </aside>
+
+        {/* Editor/Preview - 70% */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {viewMode === "code" ? (
+            <div className="flex-1 p-4">
+              <CodeEditor
+                code={currentFile.content}
+                onCodeChange={(newCode) => setCurrentFile(prev => ({ ...prev, content: newCode }))}
+                onRun={handleRun}
+                isRunning={isRunning}
+              />
+            </div>
+          ) : (
+            <div className="flex-1 p-4">
+              <CodePreview
+                code={currentFile.content}
+                isRunning={isRunning}
+              />
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );
