@@ -28,7 +28,7 @@ const CodeGenerator = () => {
     {
       id: "1",
       role: "assistant",
-      content: "Hi! I'm DeepSeek AI. Describe what you want to build and I'll generate the code for you.",
+      content: "Hi! I'm Gemini AI. Describe what you want to build and I'll generate the code for you.",
       timestamp: new Date(),
     }
   ]);
@@ -246,7 +246,7 @@ const CodeGenerator = () => {
                 <Code2 className="h-5 w-5 text-primary" />
                 <h1 className="text-lg font-semibold">AI Code Generator</h1>
                 <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded-full">
-                  DeepSeek
+                  Gemini
                 </span>
               </div>
             </div>

@@ -12,11 +12,11 @@ const agents = [
 ];
 
 const models = [
+  "Gemini",
   "DeepSeek",
   "Claude Sonnet 4",
   "GPT-4",
   "Claude Opus",
-  "Gemini Pro",
 ];
 
 const Hero = () => {
@@ -66,10 +66,10 @@ const Hero = () => {
       return;
     }
 
-    if (selectedModel !== "DeepSeek") {
+    if (selectedModel !== "Gemini") {
       toast({
         title: "Model Not Supported",
-        description: "Currently only DeepSeek model is supported for code generation",
+        description: "Currently only Gemini model is supported for code generation",
         variant: "destructive",
       });
       return;

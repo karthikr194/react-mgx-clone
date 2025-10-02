@@ -22,28 +22,25 @@ serve(async (req) => {
       );
     }
 
-    const DEEPSEEK_API_KEY = Deno.env.get('DEEPSEEK_API_KEY');
-    if (!DEEPSEEK_API_KEY) {
-      console.error('DEEPSEEK_API_KEY is not configured');
+    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+    if (!GEMINI_API_KEY) {
+      console.error('GEMINI_API_KEY is not configured');
       return new Response(
         JSON.stringify({ error: 'API key not configured' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('Calling DeepSeek API...');
-    const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+    console.log('Calling Gemini API...');
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'deepseek-coder',
-        messages: [
-          {
-            role: 'system',
-            content: `You are an expert React developer. Generate complete, production-ready React components with TypeScript.
+        contents: [{
+          parts: [{
+            text: `You are an expert React developer. Generate complete, production-ready React components with TypeScript.
             
 IMPORTANT RULES:
 1. Generate ONLY valid React + TypeScript code
@@ -54,6 +51,9 @@ IMPORTANT RULES:
 6. Add proper TypeScript types
 7. Include helpful comments
 8. Return ONLY the code, no explanations or markdown
+9. Do NOT wrap the code in markdown code blocks
+
+User request: ${prompt}
 
 Example format:
 import React, { useState } from 'react';
@@ -68,20 +68,18 @@ const MyComponent = () => {
 };
 
 export default MyComponent;`
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 4000,
+          }]
+        }],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 4000,
+        }
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('DeepSeek API error:', response.status, errorText);
+      console.error('Gemini API error:', response.status, errorText);
       return new Response(
         JSON.stringify({ 
           error: 'Failed to generate code',
@@ -92,14 +90,21 @@ export default MyComponent;`
     }
 
     const data = await response.json();
-    console.log('DeepSeek API response received');
+    console.log('Gemini API response received');
     
-    const generatedCode = data.choices[0].message.content;
+    // Extract the generated text from Gemini's response format
+    const generatedCode = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    
+    // Remove markdown code blocks if present
+    let cleanCode = generatedCode.trim();
+    if (cleanCode.startsWith('```')) {
+      cleanCode = cleanCode.replace(/^```(?:typescript|tsx|javascript|jsx)?\n?/, '').replace(/```$/, '').trim();
+    }
 
     return new Response(
       JSON.stringify({ 
-        code: generatedCode,
-        model: 'deepseek-coder'
+        code: cleanCode,
+        model: 'gemini-2.0-flash-exp'
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
