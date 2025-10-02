@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { Plus, Zap, Image, User, SlidersHorizontal, ArrowUp, Presentation, Microscope, BookOpen, Link, Check, Code2, X } from "lucide-react";
+import { Plus, Zap, Image, User, SlidersHorizontal, ArrowUp, Presentation, Microscope, BookOpen, Link, Check } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import CodeEditor from "./CodeEditor";
-import CodePreview from "./CodePreview";
+import { useNavigate } from "react-router-dom";
 
 const agents = [
   { id: 1, emoji: "🐶", name: "Dog Agent", color: "bg-orange-400" },
@@ -21,13 +20,10 @@ const models = [
 ];
 
 const Hero = () => {
+  const navigate = useNavigate();
   const [selectedAgent, setSelectedAgent] = useState<number | null>(1);
   const [inputText, setInputText] = useState("");
   const [selectedModel, setSelectedModel] = useState(models[0]);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedCode, setGeneratedCode] = useState("");
-  const [showCodeView, setShowCodeView] = useState(false);
-  const [isRunning, setIsRunning] = useState(false);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
 
   const handleAgentSelect = (agentId: number) => {
@@ -60,7 +56,7 @@ const Hero = () => {
     });
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     if (!inputText.trim()) {
       toast({
         title: "Empty Input",
@@ -79,56 +75,8 @@ const Hero = () => {
       return;
     }
 
-    setIsGenerating(true);
-    setShowCodeView(true);
-    
-    try {
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-code`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify({ prompt: inputText }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to generate code');
-      }
-
-      const data = await response.json();
-      setGeneratedCode(data.code);
-      
-      toast({
-        title: "Code Generated!",
-        description: "Your component is ready. Click 'Run' to preview it.",
-      });
-      
-      setInputText("");
-    } catch (error) {
-      console.error('Code generation error:', error);
-      toast({
-        title: "Generation Failed",
-        description: error instanceof Error ? error.message : "Failed to generate code",
-        variant: "destructive",
-      });
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  const handleRun = () => {
-    if (!generatedCode) {
-      toast({
-        title: "No Code",
-        description: "Generate code first before running",
-        variant: "destructive",
-      });
-      return;
-    }
-    setIsRunning(true);
-    setTimeout(() => setIsRunning(false), 100);
+    // Navigate to code generator page with prompt
+    navigate(`/code-generator?prompt=${encodeURIComponent(inputText)}&model=${encodeURIComponent(selectedModel)}`);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -139,9 +87,8 @@ const Hero = () => {
   };
 
   return (
-    <>
-      <section className="relative min-h-[calc(100vh-3.5rem)] bg-gradient-to-b from-background via-background to-purple-50/30">
-        <div className="container mx-auto px-4 pt-12 pb-24">
+    <section className="relative min-h-[calc(100vh-3.5rem)] bg-gradient-to-b from-background via-background to-purple-50/30">
+      <div className="container mx-auto px-4 pt-12 pb-24">
         {/* Agent Avatars */}
         <div className="flex items-center justify-center gap-2 mb-8">
           {agents.map((agent) => (
@@ -273,15 +220,11 @@ const Hero = () => {
                 
                 <button 
                   onClick={handleSubmit}
-                  disabled={!inputText.trim() || isGenerating}
+                  disabled={!inputText.trim()}
                   className="p-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-smooth disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Generate Code"
                 >
-                  {isGenerating ? (
-                    <div className="h-5 w-5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <ArrowUp className="h-5 w-5" />
-                  )}
+                  <ArrowUp className="h-5 w-5" />
                 </button>
               </div>
             </div>
@@ -321,46 +264,8 @@ const Hero = () => {
         </div>
       </div>
     </section>
-
-    {/* Code View Modal */}
-    {showCodeView && (
-      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-        <div className="bg-background w-full max-w-7xl h-[90vh] rounded-lg shadow-xl flex flex-col">
-          {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b">
-            <div className="flex items-center gap-2">
-              <Code2 className="h-5 w-5" />
-              <h2 className="text-lg font-semibold">Code Generator</h2>
-              <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded">
-                {selectedModel}
-              </span>
-            </div>
-            <button
-              onClick={() => setShowCodeView(false)}
-              className="p-2 hover:bg-muted rounded-lg transition-smooth"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-
-          {/* Content */}
-          <div className="flex-1 grid grid-cols-2 gap-4 p-4 overflow-hidden">
-            <CodeEditor
-              code={generatedCode}
-              onCodeChange={setGeneratedCode}
-              onRun={handleRun}
-              isRunning={isRunning}
-            />
-            <CodePreview
-              code={generatedCode}
-              isRunning={isRunning}
-            />
-          </div>
-        </div>
-      </div>
-    )}
-  </>
   );
 };
 
 export default Hero;
+
