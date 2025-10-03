@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import Navbar from "@/components/Navbar";
 import CodeEditor from "@/components/CodeEditor";
 import CodePreview from "@/components/CodePreview";
+import FileTree from "@/components/FileTree";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface Message {
   id: string;
@@ -24,6 +26,7 @@ const CodeGenerator = () => {
   const navigate = useNavigate();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
+  const [chatTitle, setChatTitle] = useState("New Chat");
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "1",
@@ -62,6 +65,12 @@ const CodeGenerator = () => {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    
+    // Update chat title with first user message
+    if (messages.length === 1) {
+      setChatTitle(inputText.slice(0, 50) + (inputText.length > 50 ? "..." : ""));
+    }
+    
     setInputText("");
     setIsGenerating(true);
 
@@ -244,10 +253,14 @@ const CodeGenerator = () => {
               
               <div className="flex items-center gap-2">
                 <Code2 className="h-5 w-5 text-primary" />
-                <h1 className="text-lg font-semibold">AI Code Generator</h1>
-                <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded-full">
-                  Gemini
-                </span>
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-lg font-semibold">{chatTitle}</h1>
+                    <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded-full">
+                      Gemini
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -285,7 +298,8 @@ const CodeGenerator = () => {
         {/* Chat Sidebar - 30% */}
         <aside className="w-[30%] border-r flex flex-col bg-card/30">
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <ScrollArea className="flex-1 p-4">
+            <div className="space-y-4">
             {messages.map((message) => (
               <div
                 key={message.id}
@@ -323,15 +337,16 @@ const CodeGenerator = () => {
                 </div>
               </div>
             ))}
-            {isGenerating && (
-              <div className="flex justify-start">
-                <div className="bg-muted rounded-lg p-3">
-                  <Loader2 className="h-4 w-4 animate-spin" />
+              {isGenerating && (
+                <div className="flex justify-start">
+                  <div className="bg-muted rounded-lg p-3">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  </div>
                 </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+          </ScrollArea>
 
           {/* Input */}
           <div className="p-4 border-t bg-background">
@@ -357,18 +372,33 @@ const CodeGenerator = () => {
         </aside>
 
         {/* Editor/Preview - 70% */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex overflow-hidden">
           {viewMode === "code" ? (
-            <div className="flex-1 p-4">
-              <CodeEditor
-                code={currentFile.content}
-                onCodeChange={(newCode) => setCurrentFile(prev => ({ ...prev, content: newCode }))}
-                onRun={handleRun}
-                isRunning={isRunning}
+            <>
+              <FileTree
+                files={files}
+                currentFile={currentFile.name}
+                onFileSelect={(fileName) => {
+                  const file = files.find(f => f.name === fileName);
+                  if (file) setCurrentFile(file);
+                }}
               />
-            </div>
+              <div className="flex-1 p-4 overflow-hidden">
+                <CodeEditor
+                  code={currentFile.content}
+                  onCodeChange={(newCode) => {
+                    setCurrentFile(prev => ({ ...prev, content: newCode }));
+                    setFiles(prev => prev.map(f => 
+                      f.name === currentFile.name ? { ...f, content: newCode } : f
+                    ));
+                  }}
+                  onRun={handleRun}
+                  isRunning={isRunning}
+                />
+              </div>
+            </>
           ) : (
-            <div className="flex-1 p-4">
+            <div className="flex-1 p-4 overflow-hidden">
               <CodePreview
                 code={currentFile.content}
                 isRunning={isRunning}
