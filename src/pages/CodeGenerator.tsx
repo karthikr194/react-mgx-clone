@@ -1,13 +1,13 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Send, Code2, Eye, FileCode, AlertCircle, Loader2 } from "lucide-react";
+import { ArrowLeft, Code2, Settings } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import Navbar from "@/components/Navbar";
-import CodeEditor from "@/components/CodeEditor";
-import CodePreview from "@/components/CodePreview";
-import FileTree from "@/components/FileTree";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import ChatPanel from "@/components/ChatPanel";
+import EditorPanel from "@/components/EditorPanel";
+import ThemeToggle from "@/components/ThemeToggle";
+import Split from "react-split";
 
 interface Message {
   id: string;
@@ -24,7 +24,6 @@ interface FileTab {
 
 const CodeGenerator = () => {
   const navigate = useNavigate();
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const [chatTitle, setChatTitle] = useState("New Chat");
   const [messages, setMessages] = useState<Message[]>([
@@ -39,16 +38,7 @@ const CodeGenerator = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentFile, setCurrentFile] = useState<FileTab | null>(null);
   const [viewMode, setViewMode] = useState<"code" | "preview">("code");
-  const [isRunning, setIsRunning] = useState(false);
   const [files, setFiles] = useState<FileTab[]>([]);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
 
   const handleSendMessage = async () => {
     if (!inputText.trim() || isGenerating) return;
@@ -124,8 +114,7 @@ const CodeGenerator = () => {
       // Auto-run if in preview mode
       if (viewMode === "preview") {
         setTimeout(() => {
-          setIsRunning(true);
-          setTimeout(() => setIsRunning(false), 100);
+          // Trigger preview update
         }, 500);
       }
 
@@ -229,11 +218,6 @@ const CodeGenerator = () => {
     }
   };
 
-  const handleRun = () => {
-    setIsRunning(true);
-    setTimeout(() => setIsRunning(false), 100);
-  };
-
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Navbar />
@@ -269,165 +253,54 @@ const CodeGenerator = () => {
             </div>
 
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-                <button
-                  onClick={() => setViewMode("code")}
-                  className={`px-3 py-1.5 rounded text-sm transition-smooth ${
-                    viewMode === "code" ? "bg-background shadow-sm" : "hover:bg-background/50"
-                  }`}
-                >
-                  <FileCode className="h-4 w-4 inline mr-1" />
-                  Code
-                </button>
-                <button
-                  onClick={() => {
-                    setViewMode("preview");
-                    handleRun();
-                  }}
-                  className={`px-3 py-1.5 rounded text-sm transition-smooth ${
-                    viewMode === "preview" ? "bg-background shadow-sm" : "hover:bg-background/50"
-                  }`}
-                >
-                  <Eye className="h-4 w-4 inline mr-1" />
-                  Preview
-                </button>
-              </div>
+              <ThemeToggle />
+              <Button variant="ghost" size="icon">
+                <Settings className="h-5 w-5" />
+              </Button>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="flex-1 flex overflow-hidden">
-        {/* Chat Sidebar - 30% */}
-        <aside className="w-[30%] border-r flex flex-col bg-card/30">
-          {/* Messages */}
-          <ScrollArea className="flex-1 p-4">
-            <div className="space-y-4">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
-              >
-                <div
-                  className={`max-w-[85%] rounded-lg p-3 ${
-                    message.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : message.role === "error"
-                      ? "bg-destructive/10 border border-destructive/20"
-                      : "bg-muted"
-                  }`}
-                >
-                  {message.role === "error" && (
-                    <div className="flex items-start gap-2 mb-2">
-                      <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
-                      <span className="text-xs font-medium text-destructive">Error</span>
-                    </div>
-                  )}
-                  <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
-                  {message.role === "error" && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="mt-2 h-7 text-xs"
-                      onClick={() => handleFixError(message.content)}
-                    >
-                      Fix This Error
-                    </Button>
-                  )}
-                  <span className="text-xs opacity-60 mt-1 block">
-                    {message.timestamp.toLocaleTimeString()}
-                  </span>
-                </div>
-              </div>
-            ))}
-              {isGenerating && (
-                <div className="flex justify-start">
-                  <div className="bg-muted rounded-lg p-3">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  </div>
-                </div>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-          </ScrollArea>
-
-          {/* Input */}
-          <div className="p-4 border-t bg-background">
-            <div className="flex gap-2">
-              <textarea
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="Describe what you want to build..."
-                className="flex-1 resize-none bg-muted border-0 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[60px] max-h-[120px]"
-                rows={2}
-              />
-              <Button
-                onClick={handleSendMessage}
-                disabled={!inputText.trim() || isGenerating}
-                className="self-end"
-                size="icon"
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </aside>
-
-        {/* Editor/Preview - 70% */}
-        <div className="flex-1 flex overflow-hidden">
-          {viewMode === "code" ? (
-            <>
-              <FileTree
-                files={files}
-                currentFile={currentFile?.name || ""}
-                onFileSelect={(fileName) => {
-                  const file = files.find(f => f.name === fileName);
-                  if (file) setCurrentFile(file);
-                }}
-              />
-              <div className="flex-1 p-4 overflow-hidden">
-                {currentFile ? (
-                  <CodeEditor
-                    code={currentFile.content}
-                    onCodeChange={(newCode) => {
-                      setCurrentFile(prev => prev ? { ...prev, content: newCode } : null);
-                      setFiles(prev => prev.map(f => 
-                        f.name === currentFile.name ? { ...f, content: newCode } : f
-                      ));
-                    }}
-                    onRun={handleRun}
-                    isRunning={isRunning}
-                  />
-                ) : (
-                  <div className="h-full flex items-center justify-center text-muted-foreground">
-                    <div className="text-center">
-                      <FileCode className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                      <p>Generate code to get started</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </>
-          ) : (
-            <div className="flex-1 p-4 overflow-hidden">
-              {currentFile ? (
-                <CodePreview
-                  code={currentFile.content}
-                  isRunning={isRunning}
-                />
-              ) : (
-                <div className="h-full flex items-center justify-center text-muted-foreground">
-                  <div className="text-center">
-                    <Eye className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                    <p>Generate code to see preview</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+      {/* Main Content - Resizable Split */}
+      <main className="flex-1 overflow-hidden">
+        <Split
+          className="flex h-full"
+          sizes={[30, 70]}
+          minSize={[300, 400]}
+          gutterSize={4}
+          gutterAlign="center"
+          snapOffset={30}
+          dragInterval={1}
+          direction="horizontal"
+        >
+          <ChatPanel
+            messages={messages}
+            inputText={inputText}
+            isGenerating={isGenerating}
+            onInputChange={setInputText}
+            onSendMessage={handleSendMessage}
+            onKeyPress={handleKeyPress}
+            onFixError={handleFixError}
+          />
+          
+          <EditorPanel
+            files={files}
+            currentFile={currentFile}
+            onFileSelect={(fileName) => {
+              const file = files.find(f => f.name === fileName);
+              if (file) setCurrentFile(file);
+            }}
+            onCodeChange={(newCode) => {
+              setCurrentFile(prev => prev ? { ...prev, content: newCode } : null);
+              setFiles(prev => prev.map(f => 
+                f.name === currentFile?.name ? { ...f, content: newCode } : f
+              ));
+            }}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+          />
+        </Split>
       </main>
     </div>
   );
