@@ -37,11 +37,7 @@ const CodeGenerator = () => {
   ]);
   const [inputText, setInputText] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
-  const [currentFile, setCurrentFile] = useState<FileTab>({
-    name: "Component.tsx",
-    content: "",
-    language: "typescript"
-  });
+  const [currentFile, setCurrentFile] = useState<FileTab | null>(null);
   const [viewMode, setViewMode] = useState<"code" | "preview">("code");
   const [isRunning, setIsRunning] = useState(false);
   const [files, setFiles] = useState<FileTab[]>([]);
@@ -100,21 +96,23 @@ const CodeGenerator = () => {
 
       setMessages(prev => [...prev, assistantMessage]);
       
-      // Update the current file with generated code
-      setCurrentFile({
+      // Create the file
+      const newFile = {
         name: "Component.tsx",
         content: data.code,
         language: "typescript"
-      });
-
-      // Add to files list if not exists
+      };
+      
+      setCurrentFile(newFile);
+      
+      // Add to files list
       setFiles(prev => {
         const exists = prev.find(f => f.name === "Component.tsx");
         if (!exists) {
-          return [...prev, { name: "Component.tsx", content: data.code, language: "typescript" }];
+          return [...prev, newFile];
         }
         return prev.map(f => 
-          f.name === "Component.tsx" ? { ...f, content: data.code } : f
+          f.name === "Component.tsx" ? newFile : f
         );
       });
 
@@ -199,10 +197,16 @@ const CodeGenerator = () => {
 
       setMessages(prev => [...prev, assistantMessage]);
       
-      setCurrentFile(prev => ({
-        ...prev,
-        content: data.code
-      }));
+      if (currentFile) {
+        const updatedFile = {
+          ...currentFile,
+          content: data.code
+        };
+        setCurrentFile(updatedFile);
+        setFiles(prev => prev.map(f => 
+          f.name === currentFile.name ? updatedFile : f
+        ));
+      }
 
       toast({
         title: "Error Fixed!",
@@ -377,32 +381,50 @@ const CodeGenerator = () => {
             <>
               <FileTree
                 files={files}
-                currentFile={currentFile.name}
+                currentFile={currentFile?.name || ""}
                 onFileSelect={(fileName) => {
                   const file = files.find(f => f.name === fileName);
                   if (file) setCurrentFile(file);
                 }}
               />
               <div className="flex-1 p-4 overflow-hidden">
-                <CodeEditor
-                  code={currentFile.content}
-                  onCodeChange={(newCode) => {
-                    setCurrentFile(prev => ({ ...prev, content: newCode }));
-                    setFiles(prev => prev.map(f => 
-                      f.name === currentFile.name ? { ...f, content: newCode } : f
-                    ));
-                  }}
-                  onRun={handleRun}
-                  isRunning={isRunning}
-                />
+                {currentFile ? (
+                  <CodeEditor
+                    code={currentFile.content}
+                    onCodeChange={(newCode) => {
+                      setCurrentFile(prev => prev ? { ...prev, content: newCode } : null);
+                      setFiles(prev => prev.map(f => 
+                        f.name === currentFile.name ? { ...f, content: newCode } : f
+                      ));
+                    }}
+                    onRun={handleRun}
+                    isRunning={isRunning}
+                  />
+                ) : (
+                  <div className="h-full flex items-center justify-center text-muted-foreground">
+                    <div className="text-center">
+                      <FileCode className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                      <p>Generate code to get started</p>
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           ) : (
             <div className="flex-1 p-4 overflow-hidden">
-              <CodePreview
-                code={currentFile.content}
-                isRunning={isRunning}
-              />
+              {currentFile ? (
+                <CodePreview
+                  code={currentFile.content}
+                  isRunning={isRunning}
+                />
+              ) : (
+                <div className="h-full flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <Eye className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>Generate code to see preview</p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
